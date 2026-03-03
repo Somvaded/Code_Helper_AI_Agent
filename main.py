@@ -56,7 +56,7 @@ def main():
 def generate_response(client , messages, verbose_flag):
 
     response = client.models.generate_content(
-        model = 'gemini-2.0-flash-001' ,
+        model = 'gemini-2.5-flash' ,
         contents = messages,
         config = types.GenerateContentConfig(
             tools = [available_functions],
@@ -77,24 +77,36 @@ def generate_response(client , messages, verbose_flag):
     if not response.function_calls:
         return response.text
 
-    function_responses = []
-
     if response.function_calls:
         for func in response.function_calls:
-            function_result = call_function(func,verbose_flag)
-            if(
-                not function_result.parts 
+
+            function_result = call_function(func, verbose_flag)
+
+            if (
+                not function_result.parts
                 or not function_result.parts[0].function_response
             ):
                 raise Exception("empty function call result")
+
             if verbose_flag:
                 print(f"-> {function_result.parts[0].function_response.response}")
-            function_responses.append(function_result.parts[0])
-    if not function_responses:
-        raise Exception("no functions generated...")
-    messages.append(types.Content(
-        role = "tool",
-        parts = function_responses
-    ))
+
+            # IMPORTANT: include original function call (keeps thought_signature)
+            messages.append(
+                types.Content(
+                    role="model",
+                    parts=[
+                        types.Part.from_function_call(
+                            name=func.name,
+                            args=func.args
+                        )
+                    ]
+                )
+            )
+
+            # send tool response
+            messages.append(function_result)
+
+    return None
 if __name__ =="__main__":
     main()
